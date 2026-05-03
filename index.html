@@ -6,9 +6,6 @@
 
 <title>Uwe's Minigolf App</title>
 
-<link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#2e7d32">
-
 <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
 
 <style>
@@ -44,12 +41,13 @@ input {
     max-width: 500px;
 }
 
-.leader {
+.lowest {
     background: lightgreen;
 }
 
-.winner {
-    background: gold;
+.highest {
+    background: #ff4d4d;
+    color: white;
     font-weight: bold;
 }
 
@@ -109,38 +107,42 @@ let playerCount = 4;
 
 // START
 function startGame() {
+
     playerCount = parseInt(document.getElementById("playerCount").value);
 
     document.getElementById("setup").style.display = "none";
     document.getElementById("app").style.display = "block";
 
+    let newGame = confirm("Neues Spiel starten?");
+
     buildTable();
-    loadData();
+
+    if (newGame) {
+        clearScoresOnly();   // 👈 NUR Punkte löschen, NICHT Namen
+    } else {
+        loadData();
+    }
+
     calcSum();
 }
 
-// TABLE BUILD
+// TABLE
 function buildTable() {
 
-    // HEADER
     let thead = "<tr><th>Bahn</th>";
     for (let i = 1; i <= playerCount; i++) {
-        thead += `<th><input value="Spieler ${i}" onchange="saveData()"></th>`;
+        thead += `<th><input onchange="saveData()"></th>`;
     }
     thead += "</tr>";
     document.getElementById("thead").innerHTML = thead;
 
-    // BODY
     let body = "";
     for (let i = 1; i <= 18; i++) {
         body += "<tr><td>" + i + "</td>";
 
         for (let j = 1; j <= playerCount; j++) {
             body += `<td>
-                <input type="number" data-default="2"
-                onchange="calcSum();saveData()"
-                onfocus="showValue(this)"
-                onblur="hideIfDefault(this)">
+                <input type="number" oninput="calcSum(); saveData()">
             </td>`;
         }
 
@@ -149,68 +151,93 @@ function buildTable() {
 
     document.getElementById("scoreTable").innerHTML = body;
 
-    // FOOTER
     let foot = "<tr><td>Summe</td>";
     for (let i = 1; i <= playerCount; i++) {
-        foot += `<td id="sum${i}"></td>`;
+        foot += `<td id="sum${i}">36</td>`;
+    }
+    foot += "</tr>";
+
+    foot += "<tr><td>Ø</td>";
+    for (let i = 1; i <= playerCount; i++) {
+        foot += `<td id="avg${i}">0</td>`;
     }
     foot += "</tr>";
 
     document.getElementById("tfoot").innerHTML = foot;
 }
 
-// INPUT LOGIC
-function showValue(i) {
-    if (i.value === "") i.value = 2;
+// 🧹 NUR SPIELSTAND LÖSCHEN
+function clearScoresOnly() {
+
+    document.querySelectorAll("#scoreTable input").forEach(i => i.value = "");
+
+    for (let i = 1; i <= playerCount; i++) {
+        document.getElementById("sum" + i).innerText = "36";
+        document.getElementById("avg" + i).innerText = "0";
+    }
 }
 
-function hideIfDefault(i) {
-    if (i.value == 2) i.value = "";
-    calcSum();
-    saveData();
-}
-
-// SUM CALC
+// SUMME + DURCHSCHNITT
 function calcSum() {
-    let sums = Array(playerCount).fill(0);
+
+    let sums = Array(playerCount).fill(36);
+    let counts = Array(playerCount).fill(0);
 
     document.querySelectorAll("#scoreTable tr").forEach(row => {
-        row.querySelectorAll("input").forEach((input, i) => {
-            let v = input.value === "" ? 2 : parseInt(input.value);
-            sums[i] += v;
+
+        let inputs = row.querySelectorAll("input");
+
+        inputs.forEach((input, i) => {
+
+            let v = parseInt(input.value);
+            if (isNaN(v)) return;
+
+            if (v > 2) sums[i] += (v - 2);
+            else if (v === 1) sums[i] -= 1;
+
+            counts[i]++;
         });
     });
 
+    // SUMME
     sums.forEach((s, i) => {
         let el = document.getElementById("sum" + (i + 1));
         el.innerText = s;
-        el.classList.remove("leader", "winner");
+        el.classList.remove("lowest", "highest");
     });
 
-    let min = Math.min(...sums);
+    // Ø
+    document.querySelectorAll("#scoreTable tr").forEach(() => {});
 
-    // LEADER
-    sums.forEach((s, i) => {
-        if (s === min) {
-            document.getElementById("sum" + (i + 1)).classList.add("leader");
-        }
-    });
+    for (let i = 0; i < playerCount; i++) {
+        let values = [];
 
-    // WINNER (wenn alles ausgefüllt)
-    let allFilled = [...document.querySelectorAll("#scoreTable input")]
-        .every(i => i.value !== "");
+        document.querySelectorAll("#scoreTable tr").forEach(row => {
+            let input = row.querySelectorAll("input")[i];
+            if (!input) return;
 
-    if (allFilled) {
-        sums.forEach((s, i) => {
-            if (s === min) {
-                document.getElementById("sum" + (i + 1)).classList.add("winner");
-            }
+            let v = parseInt(input.value);
+            if (!isNaN(v)) values.push(v);
         });
+
+        let avg = values.length ? (values.reduce((a,b)=>a+b,0) / values.length).toFixed(1) : 0;
+        document.getElementById("avg" + (i + 1)).innerText = avg;
     }
+
+    // Highlight
+    let min = Math.min(...sums);
+    let max = Math.max(...sums);
+
+    sums.forEach((s, i) => {
+        let el = document.getElementById("sum" + (i + 1));
+        if (s === min) el.classList.add("lowest");
+        if (s === max) el.classList.add("highest");
+    });
 }
 
 // SAVE
 function saveData() {
+
     let data = {
         players: playerCount,
         title: courseName.value,
@@ -223,11 +250,11 @@ function saveData() {
 
 // LOAD
 function loadData() {
+
     let d = JSON.parse(localStorage.getItem("golf"));
     if (!d) return;
 
     playerCount = d.players || playerCount;
-
     courseName.value = d.title;
 
     document.querySelectorAll("thead input").forEach((i, x) => {
@@ -235,7 +262,7 @@ function loadData() {
     });
 
     document.querySelectorAll("#scoreTable input").forEach((i, x) => {
-        i.value = d.scores[x];
+        i.value = d.scores[x] || "";
     });
 }
 
@@ -258,11 +285,6 @@ function shareScreenshot() {
             }
         });
     });
-}
-
-// SERVICE WORKER
-if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("service-worker.js");
 }
 
 </script>
