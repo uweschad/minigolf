@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Uwe's Minigolf App</title>
+
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#2e7d32">
+
+<script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+
+<style>
+body {
+    font-family: Arial;
+    text-align: center;
+    margin: 0;
+}
+
+table {
+    border-collapse: collapse;
+    margin: 20px auto;
+}
+
+th, td {
+    border: 1px solid #333;
+    padding: 6px;
+    width: 65px;
+    text-align: center;
+}
+
+input {
+    width: 55px;
+    text-align: center;
+}
+
+.title-input {
+    font-size: 22px;
+    border: none;
+    border-bottom: 2px solid #333;
+    outline: none;
+    width: 90%;
+    max-width: 500px;
+}
+
+.leader {
+    background: lightgreen;
+}
+
+.winner {
+    background: gold;
+    font-weight: bold;
+}
+
+button {
+    margin: 10px;
+    padding: 10px;
+    font-size: 14px;
+}
+
+footer {
+    margin-top: 20px;
+    font-size: 14px;
+}
+</style>
+</head>
+
+<body>
+
+<!-- SETUP -->
+<div id="setup">
+    <h2>⛳ Spieler auswählen</h2>
+
+    <select id="playerCount">
+        <option value="2">2 Spieler</option>
+        <option value="3">3 Spieler</option>
+        <option value="4" selected>4 Spieler</option>
+        <option value="5">5 Spieler</option>
+        <option value="6">6 Spieler</option>
+    </select>
+
+    <br><br>
+    <button onclick="startGame()">Spiel starten</button>
+</div>
+
+<!-- APP -->
+<div id="app" style="display:none;">
+
+<input class="title-input" id="courseName" value="Eppelheim" onchange="saveData()">
+
+<h2>⛳ Minigolf Scorekarte</h2>
+
+<table>
+<thead id="thead"></thead>
+<tbody id="scoreTable"></tbody>
+<tfoot id="tfoot"></tfoot>
+</table>
+
+<button onclick="shareScreenshot()">📲 Ergebnis teilen</button>
+
+<footer>Uwe‘s Minigolf App (C) 2026</footer>
+
+</div>
+
+<script>
+
+let playerCount = 4;
+
+// START
+function startGame() {
+    playerCount = parseInt(document.getElementById("playerCount").value);
+
+    document.getElementById("setup").style.display = "none";
+    document.getElementById("app").style.display = "block";
+
+    buildTable();
+    loadData();
+    calcSum();
+}
+
+// TABLE BUILD
+function buildTable() {
+
+    // HEADER
+    let thead = "<tr><th>Bahn</th>";
+    for (let i = 1; i <= playerCount; i++) {
+        thead += `<th><input value="Spieler ${i}" onchange="saveData()"></th>`;
+    }
+    thead += "</tr>";
+    document.getElementById("thead").innerHTML = thead;
+
+    // BODY
+    let body = "";
+    for (let i = 1; i <= 18; i++) {
+        body += "<tr><td>" + i + "</td>";
+
+        for (let j = 1; j <= playerCount; j++) {
+            body += `<td>
+                <input type="number" data-default="2"
+                onchange="calcSum();saveData()"
+                onfocus="showValue(this)"
+                onblur="hideIfDefault(this)">
+            </td>`;
+        }
+
+        body += "</tr>";
+    }
+
+    document.getElementById("scoreTable").innerHTML = body;
+
+    // FOOTER
+    let foot = "<tr><td>Summe</td>";
+    for (let i = 1; i <= playerCount; i++) {
+        foot += `<td id="sum${i}"></td>`;
+    }
+    foot += "</tr>";
+
+    document.getElementById("tfoot").innerHTML = foot;
+}
+
+// INPUT LOGIC
+function showValue(i) {
+    if (i.value === "") i.value = 2;
+}
+
+function hideIfDefault(i) {
+    if (i.value == 2) i.value = "";
+    calcSum();
+    saveData();
+}
+
+// SUM CALC
+function calcSum() {
+    let sums = Array(playerCount).fill(0);
+
+    document.querySelectorAll("#scoreTable tr").forEach(row => {
+        row.querySelectorAll("input").forEach((input, i) => {
+            let v = input.value === "" ? 2 : parseInt(input.value);
+            sums[i] += v;
+        });
+    });
+
+    sums.forEach((s, i) => {
+        let el = document.getElementById("sum" + (i + 1));
+        el.innerText = s;
+        el.classList.remove("leader", "winner");
+    });
+
+    let min = Math.min(...sums);
+
+    // LEADER
+    sums.forEach((s, i) => {
+        if (s === min) {
+            document.getElementById("sum" + (i + 1)).classList.add("leader");
+        }
+    });
+
+    // WINNER (wenn alles ausgefüllt)
+    let allFilled = [...document.querySelectorAll("#scoreTable input")]
+        .every(i => i.value !== "");
+
+    if (allFilled) {
+        sums.forEach((s, i) => {
+            if (s === min) {
+                document.getElementById("sum" + (i + 1)).classList.add("winner");
+            }
+        });
+    }
+}
+
+// SAVE
+function saveData() {
+    let data = {
+        players: playerCount,
+        title: courseName.value,
+        names: [...document.querySelectorAll("thead input")].map(i => i.value),
+        scores: [...document.querySelectorAll("#scoreTable input")].map(i => i.value)
+    };
+
+    localStorage.setItem("golf", JSON.stringify(data));
+}
+
+// LOAD
+function loadData() {
+    let d = JSON.parse(localStorage.getItem("golf"));
+    if (!d) return;
+
+    playerCount = d.players || playerCount;
+
+    courseName.value = d.title;
+
+    document.querySelectorAll("thead input").forEach((i, x) => {
+        i.value = d.names[x] || i.value;
+    });
+
+    document.querySelectorAll("#scoreTable input").forEach((i, x) => {
+        i.value = d.scores[x];
+    });
+}
+
+// SHARE
+function shareScreenshot() {
+    html2canvas(document.getElementById("app")).then(canvas => {
+        canvas.toBlob(blob => {
+            const file = new File([blob], "minigolf.png", { type: "image/png" });
+
+            if (navigator.share) {
+                navigator.share({
+                    title: "Minigolf Ergebnis",
+                    files: [file]
+                });
+            } else {
+                let a = document.createElement("a");
+                a.href = canvas.toDataURL();
+                a.download = "minigolf.png";
+                a.click();
+            }
+        });
+    });
+}
+
+// SERVICE WORKER
+if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("service-worker.js");
+}
+
+</script>
+
+</body>
+</html>
